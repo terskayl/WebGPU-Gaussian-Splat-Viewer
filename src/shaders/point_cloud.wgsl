@@ -13,6 +13,10 @@ struct Gaussian {
     scale: array<u32,2>
 }
 
+fn sigmoid(x: f32) -> f32 {
+    return 1.f / (1.f + exp(-x));
+}
+
 @group(0) @binding(0)
 var<uniform> camera: CameraUniforms;
 
@@ -21,6 +25,7 @@ var<storage,read> gaussians : array<Gaussian>;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
+    @location(0) alpha: f32
 };
 
 @vertex
@@ -36,11 +41,12 @@ fn vs_main(
 
     // TODO: MVP calculations
     out.position = camera.proj * camera.view * pos;
+    out.alpha = sigmoid(b.y);
 
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(1., 1., 0., 1.);
+    return vec4<f32>(1., 1., 0., in.alpha);
 }
