@@ -72,12 +72,40 @@ export class CameraControl {
   }
 
   rotate(xDelta: number, yDelta: number) {
-    // const r = mat4.identity();
-    // mat4.rotateY(r, -xDelta, r);
-    // mat4.rotateX(r, yDelta, r);
-    const r = mat4.fromQuat(quat.fromEuler(yDelta * 0.01, -xDelta * 0.01, 0, 'xyz'));
+    const lookAtVector = vec3.mulScalar(this.camera.look, 5);
+    const lookAtLoc = vec3.add(this.camera.position, lookAtVector);
+    this.camera.look = vec3.normalize(this.camera.look)
+    var phi =  Math.acos(this.camera.look[1]);
+    var theta = Math.atan2(this.camera.look[2], this.camera.look[0]);
 
-    mat4.mul(r, this.camera.rotation, this.camera.rotation);
+    phi += -yDelta * 0.01;
+    theta += -xDelta * 0.01;
+
+    const EPS = 0.0001;
+    phi = Math.max(EPS, Math.min(Math.PI - EPS, phi));
+
+    let newDir = vec3.create(Math.sin(phi) * Math.cos(theta),
+                             Math.cos(phi),
+                             Math.sin(phi) * Math.sin(theta)) 
+
+    const newLookAtVector = vec3.mulScalar(newDir, 5);
+    this.camera.position = vec3.sub(lookAtLoc, newLookAtVector);
+    this.camera.look = vec3.normalize(newDir);
+    this.camera.right = vec3.normalize(vec3.cross([0, 1, 0], this.camera.look));
+    this.camera.up = vec3.normalize(vec3.cross(this.camera.look, this.camera.right));
+
+    this.camera.rotation = mat4.create(
+      this.camera.right[0], this.camera.up[0], this.camera.look[0], 0,
+      this.camera.right[1], this.camera.up[1], this.camera.look[1], 0,
+      this.camera.right[2], this.camera.up[2], this.camera.look[2], 0,
+      0, 0, 0, 1
+    );
+
+    //mat4.rotateY(r, -xDelta * 0.01, r);
+    //mat4.rotateX(r, yDelta * 0.01, r);
+    //const r = mat4.fromQuat(quat.fromEuler(yDelta * 0.01, -xDelta * 0.01, 0, 'xyz'));
+
+    //mat4.mul(r, this.camera.rotation, this.camera.rotation);
 
     this.camera.update_buffer();
   }
