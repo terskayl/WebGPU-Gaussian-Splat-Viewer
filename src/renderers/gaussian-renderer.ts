@@ -37,12 +37,136 @@ export default function get_renderer(
 
   const nulling_data = new Uint32Array([0]);
 
+  const n = pc.num_points;
+  // Buffers for position, uv, covariance, radius, color
+  const splat_buffer = createBuffer(
+    device,
+    'splat buffer - position, uv/rad/alpha, covariance, color',
+    n * 16 * Float32Array.BYTES_PER_ELEMENT, // 4 for pos, 4 for uv/rad/alpha, 4 for cov, 4 for color
+    GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.VERTEX
+  );
+
+  const render_settings_buffer = createBuffer(
+    device,
+    'render settings buffer',
+    2 * Uint32Array.BYTES_PER_ELEMENT,
+    GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  );
+
+  const gaussian_scaling = 1; // can be parameterized later
+  const sh_deg = 3; // hardcoded for now, can be parameterized later
+  const render_settings_data = new Uint32Array([gaussian_scaling, sh_deg]);
+  device.queue.writeBuffer(render_settings_buffer, 0, render_settings_data);
+
   // ===============================================
   //    Create Compute Pipeline and Bind Groups
   // ===============================================
+
+  const camera_bind_group_layout: GPUBindGroupLayout = device.createBindGroupLayout({
+    label: "camera bind group layout",
+    entries: [{ // camera
+      binding: 0,
+      visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+      buffer: {type: 'uniform'}
+    },
+    { // render settings
+      binding: 1,
+      visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+      buffer: {type: 'uniform'}
+    }]
+  });
+
+  const gaussian_bind_group_layout: GPUBindGroupLayout = device.createBindGroupLayout({
+    label: "gaussians bind group layout",
+    entries: [
+      { // 3D Gaussians
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+        buffer: {type: 'read-only-storage'}
+      },
+      { // SH Coefficients
+        binding: 1,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE,
+        buffer: {type: 'read-only-storage'}
+      }
+    ]
+  });
+  
+  const output_bind_group_layout: GPUBindGroupLayout = device.createBindGroupLayout({
+    label: 'output bind group layout',
+    entries: [
+      { // Splat buffer - Position, UV/rad/alpha, Covariance, Color
+        binding: 0,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'storage' }
+      },
+    ]
+  });
+  
+  const sort_bind_group_layout: GPUBindGroupLayout = device.createBindGroupLayout({
+    label: 'sort bind group layout',
+    entries: [
+      { // Sort info
+        binding: 0,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'storage' }
+      },
+      { // Sort depths
+        binding: 1,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'storage' }
+      },
+      { // Sort indices
+        binding: 2,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'storage' }
+      },
+      { // Dispatch indirect
+        binding: 3,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'storage' }
+      }
+    ]
+  });
+
+  const gaussian_bind_group: GPUBindGroup = device.createBindGroup({
+    label: 'gaussian gaussians bind group',
+    layout: gaussian_bind_group_layout,
+    entries: [
+      {binding: 0, resource: { buffer: pc.gaussian_3d_buffer }},
+      {binding: 1, resource: { buffer: pc.sh_buffer }},
+    ],
+  });
+  
+  const output_bind_group: GPUBindGroup = device.createBindGroup({
+    label: 'gaussian output bind group',
+    layout: output_bind_group_layout,
+    entries: [
+      { binding: 0, resource: { buffer: splat_buffer } },
+    ]
+  });
+  
+  const camera_bind_group: GPUBindGroup = device.createBindGroup({
+    label: 'gaussian camera bind group',
+    layout: camera_bind_group_layout,
+    entries: [{binding: 0, resource: { buffer: camera_buffer }},
+    {binding: 1, resource: { buffer: render_settings_buffer }}
+    ],
+  });
+
+  const preprocess_pipeline_layout: GPUPipelineLayout = device.createPipelineLayout({
+    label: 'preprocess pipeline layout',
+    bindGroupLayouts: [
+      gaussian_bind_group_layout,
+      output_bind_group_layout,
+      sort_bind_group_layout,
+      camera_bind_group_layout
+    ]
+  });
+  
   const preprocess_pipeline = device.createComputePipeline({
     label: 'preprocess',
-    layout: 'auto',
+    layout: preprocess_pipeline_layout,
     compute: {
       module: device.createShaderModule({ code: preprocessWGSL }),
       entryPoint: 'preprocess',
@@ -68,38 +192,6 @@ export default function get_renderer(
   // ===============================================
   //    Create Render Pipeline and Bind Groups
   // ===============================================
-
-  const camera_bind_group_layout: GPUBindGroupLayout = device.createBindGroupLayout({
-    label: "camera bind group layout",
-    entries: [{
-      binding: 0,
-      visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-      buffer: {type: 'uniform'}
-    }]
-  });
-
-  const gaussian_bind_group_layout: GPUBindGroupLayout = device.createBindGroupLayout({
-    label: "gaussians bind group layout",
-    entries: [{
-      binding: 0,
-      visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-      buffer: {type: 'read-only-storage'}
-    }]
-  });
-
-  const camera_bind_group: GPUBindGroup = device.createBindGroup({
-    label: 'gaussian camera bind group',
-    layout: camera_bind_group_layout,
-    entries: [{binding: 0, resource: { buffer: camera_buffer }}],
-  });
-
-  const gaussian_bind_group: GPUBindGroup = device.createBindGroup({
-    label: 'gaussian gaussians bind group',
-    layout: gaussian_bind_group_layout,
-    entries: [
-      {binding: 0, resource: { buffer: pc.gaussian_3d_buffer }},
-    ],
-  });
 
   const gaussian_render_pipeline_layout: GPUPipelineLayout = device.createPipelineLayout({
     label: 'gaussian pipeline layout',
@@ -138,17 +230,6 @@ export default function get_renderer(
     ])
   );
 
-  const instanceCount = 1000;
-  const instanceData = new Float32Array(instanceCount * 2);
-  for (let i = 0; i < instanceCount; i++) {
-    instanceData[i * 2 + 0] = (Math.random() - 0.5) * 2.0; // x offset
-    instanceData[i * 2 + 1] = (Math.random() - 0.5) * 2.0; // y offset
-  }
-  const instanceBuffer = device.createBuffer({
-    size: instanceData.byteLength,
-    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-  });
-  device.queue.writeBuffer(instanceBuffer, 0, instanceData);
 
   const vertexBuffers: GPUVertexBufferLayout[] = [
     { // Quad Vertices
@@ -157,12 +238,32 @@ export default function get_renderer(
         { shaderLocation: 0, offset: 0, format: 'float32x3' },
       ],
     },
-    { // Instance Data - 2D Gaussian Data
-      // What do we want? position, uv, cov, radius, and color?
-      arrayStride: 2 * Float32Array.BYTES_PER_ELEMENT,
+    { // Instance Position
+      arrayStride: 16 * Float32Array.BYTES_PER_ELEMENT,
       stepMode: 'instance',
       attributes: [
-        { shaderLocation: 1, offset: 0, format: 'float32x2' },
+        { shaderLocation: 1, offset: 0, format: 'float32x3' },
+      ],
+    },
+    { // Instance UV/Radius/Alpha
+      arrayStride: 16 * Float32Array.BYTES_PER_ELEMENT,
+      stepMode: 'instance',
+      attributes: [
+        { shaderLocation: 2, offset: 4 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
+      ],
+    },
+    { // Instance Covariance
+      arrayStride: 16 * Float32Array.BYTES_PER_ELEMENT,
+      stepMode: 'instance',
+      attributes: [
+        { shaderLocation: 3, offset: 8 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x3' },
+      ],
+    },
+    { // Instance Color
+      arrayStride: 16 * Float32Array.BYTES_PER_ELEMENT,
+      stepMode: 'instance',
+      attributes: [
+        { shaderLocation: 4, offset: 12 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x3' },
       ],
     }
   ];
@@ -190,6 +291,18 @@ export default function get_renderer(
   // ===============================================
 
   const render = (encoder: GPUCommandEncoder, texture_view: GPUTextureView) => {
+    
+    const preprocess_pass = encoder.beginComputePass({
+      label: 'gaussian preprocess pass',
+    });
+    preprocess_pass.setPipeline(preprocess_pipeline);
+    preprocess_pass.setBindGroup(0, gaussian_bind_group);
+    preprocess_pass.setBindGroup(1, output_bind_group);
+    preprocess_pass.setBindGroup(2, sort_bind_group);
+    preprocess_pass.setBindGroup(3, camera_bind_group);
+    preprocess_pass.dispatchWorkgroups(C.histogram_wg_size);
+    preprocess_pass.end();
+
     const pass = encoder.beginRenderPass({
       label: 'gaussian render pass',
       colorAttachments: [
@@ -204,11 +317,14 @@ export default function get_renderer(
 
     pass.setPipeline(gaussian_render_pipeline);
     pass.setVertexBuffer(0, quad_buffer);
-    pass.setVertexBuffer(1, instanceBuffer);
+    pass.setVertexBuffer(1, splat_buffer);
+    pass.setVertexBuffer(2, splat_buffer);
+    pass.setVertexBuffer(3, splat_buffer);
+    pass.setVertexBuffer(4, splat_buffer);
     pass.setBindGroup(0, camera_bind_group);
     pass.setBindGroup(1, gaussian_bind_group);
     pass.setIndexBuffer(index_buffer, 'uint16');
-    pass.drawIndexed(6, instanceCount);
+    pass.drawIndexed(6, n);
 
     pass.end();
   };
