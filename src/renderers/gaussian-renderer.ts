@@ -193,11 +193,57 @@ export default function get_renderer(
   //    Create Render Pipeline and Bind Groups
   // ===============================================
 
+    const compute_output_bind_group_layout: GPUBindGroupLayout = device.createBindGroupLayout({
+      label: 'compute output bind group layout',
+      entries: [
+        { // Splat buffer - Position, UV/rad/alpha, Covariance, Color
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: {
+            type: 'read-only-storage',
+          },
+        },
+      ],
+    });
+
+    const compute_output_bind_group: GPUBindGroup = device.createBindGroup({
+      label: 'compute output bind group',
+      layout: compute_output_bind_group_layout,
+      entries: [
+        { binding: 0, resource: { buffer: splat_buffer } },
+      ]
+    });
+
+    const index_bind_group_layout: GPUBindGroupLayout = device.createBindGroupLayout({
+      label: 'index bind group layout',
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: {
+            type: 'read-only-storage',
+          },
+        },
+      ],
+    });
+
+    const index_bind_group: GPUBindGroup = device.createBindGroup({
+      label: 'index bind group',
+      layout: index_bind_group_layout,
+      entries: [
+        {
+          binding: 0,
+          resource: { buffer: sorter.ping_pong[0].sort_indices_buffer },
+        },
+      ],
+    });
+
   const gaussian_render_pipeline_layout: GPUPipelineLayout = device.createPipelineLayout({
     label: 'gaussian pipeline layout',
     bindGroupLayouts: [
       camera_bind_group_layout,
-      gaussian_bind_group_layout
+      compute_output_bind_group_layout,
+      index_bind_group_layout
     ]
   })
 
@@ -324,8 +370,7 @@ export default function get_renderer(
     sorter.sort(encoder);
 
   const indirect_draw_data = new Uint32Array([
-    // Initialize to 0 instance. The actual instance count is determined by the preprocess step.
-    6, 0, 0, 0 // vertexCount, instanceCount, firstVertex, firstInstance
+    6, 0, 0, 0
   ]);
 
   const indirect_draw_buffer = createBuffer(
@@ -354,6 +399,7 @@ export default function get_renderer(
       ],
     });
 
+
     pass.setPipeline(gaussian_render_pipeline);
     pass.setVertexBuffer(0, quad_buffer);
     pass.setVertexBuffer(1, splat_buffer);
@@ -361,7 +407,8 @@ export default function get_renderer(
     pass.setVertexBuffer(3, splat_buffer);
     pass.setVertexBuffer(4, splat_buffer);
     pass.setBindGroup(0, camera_bind_group);
-    pass.setBindGroup(1, gaussian_bind_group);
+    pass.setBindGroup(1, compute_output_bind_group);
+    pass.setBindGroup(2, index_bind_group);
     //pass.setIndexBuffer(index_buffer, 'uint16');
     //pass.drawIndexed(6, n);
     pass.drawIndirect(indirect_draw_buffer, 0);

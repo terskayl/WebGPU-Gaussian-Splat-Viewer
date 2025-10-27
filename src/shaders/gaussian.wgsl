@@ -33,16 +33,38 @@ struct CameraUniforms {
 
 @group(0) @binding(0)
 var<uniform> camera: CameraUniforms;
+@group(1) @binding(0)
+var<storage, read> splats : array<Splat>;
+@group(2) @binding(0)
+var<storage, read> sort_indices : array<u32>;
 
 @vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
+fn vs_main(in: VertexInput, @builtin(vertex_index) vertexId: u32, @builtin(instance_index) instance_id: u32) -> VertexOutput {
     //TODO: reconstruct 2D quad based on information from splat, pass 
     var out: VertexOutput;
 
-    let scale = in.instance_uvRadAlpha.z / camera.viewport;
-    let pos = vec3(scale, 1.0) * 100.0 *  in.position + vec3<f32>(in.instance_pos.xy, 0.0);
-    out.position = vec4<f32>(pos, 1.0); 
-    out.color = in.instance_col.xyz;
+    let splatIdx = sort_indices[instance_id];
+    let splat = splats[splatIdx];
+
+    let vertices = array<vec2<f32>, 6>(
+        vec2<f32>(-0.01, -0.01),
+        vec2<f32>(0.01, -0.01),
+        vec2<f32>(-0.01, 0.01),
+        vec2<f32>(-0.01, 0.01),
+        vec2<f32>(0.01, -0.01),
+        vec2<f32>(0.01, 0.01),
+    );
+
+
+    // let scale = in.instance_uvRadAlpha.z / camera.viewport;
+    // let pos = scale * 100.0 * vertices[vertexId] + in.instance_pos.xy;
+    // out.position = vec4<f32>(pos, 0.0, 1.0); 
+    // out.color = in.instance_col.xyz;
+
+    let scale = splat.uvRadAlpha.z / camera.viewport;
+    let pos = scale * 100.0 * vertices[vertexId] + splat.position.xy;
+    out.position = vec4<f32>(pos, 0.0, 1.0);
+    out.color = splat.color.xyz;
     return out;
 }
 

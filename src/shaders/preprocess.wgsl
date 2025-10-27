@@ -225,7 +225,7 @@ fn preprocess(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgr
         atomicAdd(&sort_infos.keys_size, 1u);
         let depth = view_pos.z;
         sort_depths[idx] = u32(100000000.0 - depth * 1000000.0); // make float depth into sortable uint
-        sort_indices[idx] = curr_idx;
+        sort_indices[idx] = idx;
 
         // increment DispatchIndirect.dispatch_x each time you reach limit for one dispatch of keys
         let keys_per_dispatch = workgroupSize * sortKeyPerThread; 
