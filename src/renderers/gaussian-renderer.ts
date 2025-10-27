@@ -292,6 +292,23 @@ export default function get_renderer(
 
   const render = (encoder: GPUCommandEncoder, texture_view: GPUTextureView) => {
     
+      const null_buffer = createBuffer(
+          device, 'null_buffer', 4,
+          GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST, nulling_data
+      );
+    
+
+      encoder.copyBufferToBuffer(
+          null_buffer, 0,
+          sorter.sort_info_buffer, 0,
+          4
+      );
+      encoder.copyBufferToBuffer(
+          null_buffer, 0,
+          sorter.sort_dispatch_indirect_buffer, 0,
+          4
+      );
+
     const preprocess_pass = encoder.beginComputePass({
       label: 'gaussian preprocess pass',
     });
@@ -302,6 +319,28 @@ export default function get_renderer(
     preprocess_pass.setBindGroup(3, camera_bind_group);
     preprocess_pass.dispatchWorkgroups(C.histogram_wg_size);
     preprocess_pass.end();
+
+
+    sorter.sort(encoder);
+
+  const indirect_draw_data = new Uint32Array([
+    // Initialize to 0 instance. The actual instance count is determined by the preprocess step.
+    6, 0, 0, 0 // vertexCount, instanceCount, firstVertex, firstInstance
+  ]);
+
+  const indirect_draw_buffer = createBuffer(
+    device,
+    'indirect draw buffer',
+    4 * 4,
+    GPUBufferUsage.INDIRECT | GPUBufferUsage.COPY_DST,
+    indirect_draw_data
+  );
+
+    encoder.copyBufferToBuffer(
+        sorter.sort_info_buffer, 0,
+        indirect_draw_buffer, 4,
+        4
+    );
 
     const pass = encoder.beginRenderPass({
       label: 'gaussian render pass',
@@ -323,8 +362,9 @@ export default function get_renderer(
     pass.setVertexBuffer(4, splat_buffer);
     pass.setBindGroup(0, camera_bind_group);
     pass.setBindGroup(1, gaussian_bind_group);
-    pass.setIndexBuffer(index_buffer, 'uint16');
-    pass.drawIndexed(6, n);
+    //pass.setIndexBuffer(index_buffer, 'uint16');
+    //pass.drawIndexed(6, n);
+    pass.drawIndirect(indirect_draw_buffer, 0);
 
     pass.end();
   };
@@ -334,7 +374,6 @@ export default function get_renderer(
   // ===============================================
   return {
     frame: (encoder: GPUCommandEncoder, texture_view: GPUTextureView) => {
-      sorter.sort(encoder);
       render(encoder, texture_view);
     },
     camera_buffer,

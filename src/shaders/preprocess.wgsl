@@ -139,7 +139,7 @@ fn computeColorFromSH(dir: vec3<f32>, v_idx: u32, sh_deg: u32) -> vec3<f32> {
 fn eigenvalues(cov: mat2x2<f32>) -> vec2<f32> {
     let trace = cov[0][0] + cov[1][1];
     let det = cov[0][0] * cov[1][1] - cov[0][1] * cov[1][0];
-    let temp = sqrt(trace * trace / 4.0 - det);
+    let temp = sqrt(max(0.1, trace * trace / 4.0 - det));
     let lambda1 = trace / 2.0 + temp;
     let lambda2 = trace / 2.0 - temp;
     return vec2<f32>(lambda1, lambda2);
@@ -156,9 +156,9 @@ fn preprocess(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgr
     let b = unpack2x16float(vertex.pos_opacity[1]);
     let world_pos = vec3<f32>(a.x, a.y, b.x);
     let view_pos = (camera.view * vec4<f32>(world_pos, 1.0)).xyz;
-    let clip_pos = camera.proj * vec4<f32>(view_pos, 1.0);
-    
-    out_splat[idx].position = clip_pos.xyz / clip_pos.w;
+    var clip_pos = camera.proj * vec4<f32>(view_pos, 1.0);
+    clip_pos /= clip_pos.w;
+    out_splat[idx].position = clip_pos.xyz;
 
     let sh_deg = 3u; // TODO u32(render_settings.sh_deg);
     let eye = camera.view_inv[3].xyz;
@@ -197,16 +197,20 @@ fn preprocess(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgr
 	//cov3D[1][1] += 0.3f;
 
     let proj_matrix = mat2x3<f32>(
-        vec3<f32>(camera.viewport.x / view_pos.z, 0.0, -camera.viewport.x * view_pos.x / (view_pos.z * view_pos.z)),
-        vec3<f32>(0.0, camera.viewport.y / view_pos.z, -camera.viewport.y * view_pos.y / (view_pos.z * view_pos.z) )
+        vec3<f32>(camera.focal.x / view_pos.z, 0.0, -camera.focal.x * view_pos.x / (view_pos.z * view_pos.z)),
+        vec3<f32>(0.0, camera.focal.y / view_pos.z, -camera.focal.y * view_pos.y / (view_pos.z * view_pos.z) )
     );
+
+    // let W = transpose(mat3x3f(
+    //     camera.view[0].xyz, camera.view[1].xyz, camera.view[2].xyz
+    // ));
 
     let cov2D = transpose(proj_matrix) * cov3D * proj_matrix;
 
     out_splat[idx].covariance = vec3<f32>(cov2D[0][0], cov2D[0][1], cov2D[1][1]);
 
     let eigenvals = eigenvalues(cov2D);
-    var radius = max(eigenvals.x, eigenvals.y);
+    var radius = ceil(3.0 * sqrt(max(eigenvals.x, eigenvals.y)));
     // Nan Check
     if (radius != radius) {
         radius = 0.0;
@@ -216,15 +220,21 @@ fn preprocess(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgr
     // Store the radius in the output splat
     out_splat[idx].radius = radius;
 
+    if (clip_pos.x > -1.2 || clip_pos.x < 1.2 || clip_pos.y > -1.2 || clip_pos.y < 1.2) {
+        let curr_idx = atomicLoad(&sort_infos.keys_size);
+        atomicAdd(&sort_infos.keys_size, 1u);
+        let depth = view_pos.z;
+        sort_depths[idx] = u32(100000000.0 - depth * 1000000.0); // make float depth into sortable uint
+        sort_indices[idx] = curr_idx;
+
+        // increment DispatchIndirect.dispatch_x each time you reach limit for one dispatch of keys
+        let keys_per_dispatch = workgroupSize * sortKeyPerThread; 
+        if (curr_idx % keys_per_dispatch) == (keys_per_dispatch - 1u) {
+            atomicAdd(&sort_dispatch.dispatch_x, 1u);
+        }
+
+    }
 
 
-    // let depth = view_pos.z;
-    // sort_depths[idx] = u32(depth * 1000000.0); // make float depth into sortable uint
-    // sort_indices[idx] = idx;
 
-    let keys_per_dispatch = workgroupSize * sortKeyPerThread; 
-    // increment DispatchIndirect.dispatchx each time you reach limit for one dispatch of keys
-    // if (idx % keys_per_dispatch) == (keys_per_dispatch - 1u) {
-    //     atomicAdd(&sort_dispatch.dispatch_x, 1u);
-    // }
 }

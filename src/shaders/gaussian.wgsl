@@ -22,13 +22,25 @@ struct Splat {
     color: vec3<f32>,
 };
 
+struct CameraUniforms {
+    view: mat4x4<f32>,
+    view_inv: mat4x4<f32>,
+    proj: mat4x4<f32>,
+    proj_inv: mat4x4<f32>,
+    viewport: vec2<f32>,
+    focal: vec2<f32>
+};
+
+@group(0) @binding(0)
+var<uniform> camera: CameraUniforms;
+
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
     //TODO: reconstruct 2D quad based on information from splat, pass 
     var out: VertexOutput;
 
-    let scale = min(0.01, in.instance_uvRadAlpha.z);
-    let pos = scale * 100.0 *  in.position + vec3<f32>(in.instance_pos.xy, 0.0);
+    let scale = in.instance_uvRadAlpha.z / camera.viewport;
+    let pos = vec3(scale, 1.0) * 100.0 *  in.position + vec3<f32>(in.instance_pos.xy, 0.0);
     out.position = vec4<f32>(pos, 1.0); 
     out.color = in.instance_col.xyz;
     return out;
