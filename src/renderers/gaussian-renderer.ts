@@ -325,7 +325,22 @@ export default function get_renderer(
     fragment: {
       module: gaussian_render_shader,
       entryPoint: 'fs_main',
-      targets: [{ format: presentation_format }],
+      targets: [
+        { format: presentation_format,
+          blend: {
+            color: {
+              srcFactor: 'src-alpha',
+              dstFactor: 'one-minus-src-alpha',
+              operation: 'add',
+            },
+            alpha: {
+              srcFactor: 'one',
+              dstFactor: 'one-minus-src-alpha',
+              operation: 'add',
+            },
+          }
+         }
+      ],
     },
     primitive: {
       topology: 'triangle-list',
@@ -363,7 +378,7 @@ export default function get_renderer(
     preprocess_pass.setBindGroup(1, output_bind_group);
     preprocess_pass.setBindGroup(2, sort_bind_group);
     preprocess_pass.setBindGroup(3, camera_bind_group);
-    preprocess_pass.dispatchWorkgroups(C.histogram_wg_size);
+    preprocess_pass.dispatchWorkgroups(Math.ceil(pc.num_points / C.histogram_wg_size), 1, 1);
     preprocess_pass.end();
 
 

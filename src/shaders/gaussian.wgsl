@@ -11,14 +11,15 @@ struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     //TODO: information passed from vertex shader to fragment shader
     @location (0) uvRadAlpha: vec4<f32>,
-    @location (1) covariance: vec3<f32>,
+    @location (1) conic: vec3<f32>,
     @location (2) color: vec3<f32>,
+    @location (3) center: vec2<f32>,
 };
 
 struct Splat {
     position: vec3<f32>,
     uvRadAlpha: vec4<f32>,
-    covariance: vec3<f32>,
+    conic: vec3<f32>,
     color: vec3<f32>,
 };
 
@@ -47,28 +48,41 @@ fn vs_main(in: VertexInput, @builtin(vertex_index) vertexId: u32, @builtin(insta
     let splat = splats[splatIdx];
 
     let vertices = array<vec2<f32>, 6>(
-        vec2<f32>(-0.01, -0.01),
-        vec2<f32>(0.01, -0.01),
-        vec2<f32>(-0.01, 0.01),
-        vec2<f32>(-0.01, 0.01),
-        vec2<f32>(0.01, -0.01),
-        vec2<f32>(0.01, 0.01),
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>(1.0, -1.0),
+        vec2<f32>(-1.0, 1.0),
+        vec2<f32>(-1.0, 1.0),
+        vec2<f32>(1.0, -1.0),
+        vec2<f32>(1.0, 1.0),
     );
 
-
-    // let scale = in.instance_uvRadAlpha.z / camera.viewport;
-    // let pos = scale * 100.0 * vertices[vertexId] + in.instance_pos.xy;
-    // out.position = vec4<f32>(pos, 0.0, 1.0); 
-    // out.color = in.instance_col.xyz;
-
     let scale = splat.uvRadAlpha.z / camera.viewport;
-    let pos = scale * 100.0 * vertices[vertexId] + splat.position.xy;
+    let pos = scale * vertices[vertexId] + splat.position.xy;
     out.position = vec4<f32>(pos, 0.0, 1.0);
+    out.uvRadAlpha = splat.uvRadAlpha;
     out.color = splat.color.xyz;
+    out.conic = splat.conic;
+    out.center = splat.position.xy;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(in.color, 1.);
+    // Position to NDC
+    var position = (in.position.xy / camera.viewport) * 2.0f - 1.0f;
+    position.y *= -1.0f;
+
+    // compute the offset in screen-space position
+    var diff = position.xy - in.center;
+    diff *= camera.viewport * 0.5f;
+
+    let exponent = -0.5 * (in.conic.x * diff.x * diff.x - 2.0 * in.conic.y * diff.x * diff.y + in.conic.z * diff.y * diff.y);
+    if (exponent > 0.0) {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+    let alpha = min(0.99, in.uvRadAlpha.w * exp(exponent));
+    var color = vec4<f32>(in.color, alpha);
+    color = vec4<f32>(color.rgb, color.a);
+
+    return color;
 }
