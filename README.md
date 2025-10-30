@@ -8,7 +8,7 @@
 
 ### Live Demo
 Click below to launch the demo in a new webpage. You will need a `.ply` to be able to load it. You may download the samples used in the examples below in this [Google Drive](https://drive.google.com/drive/folders/1Fz0QhyDU12JTsl2e7umGi5iy_V9drrIW?usp=sharing) 
-[![](images/demo.png)](http://terskayl.github.io//WebGPU-Gaussian-Splat-Viewer)
+[![](images/demo.png)](http://terskayl.github.io/WebGPU-Gaussian-Splat-Viewer)
 
 ### Demo Video/GIF
 
