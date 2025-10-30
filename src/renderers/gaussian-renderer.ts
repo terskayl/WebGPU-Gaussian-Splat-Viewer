@@ -5,7 +5,8 @@ import { get_sorter,c_histogram_block_rows,C } from '../sort/sort';
 import { Renderer } from './renderer';
 
 export interface GaussianRenderer extends Renderer {
-
+  dataBuffer: Uint32Array,
+  buffer: GPUBuffer,
 }
 
 // Utility to create GPU buffers
@@ -53,9 +54,9 @@ export default function get_renderer(
     GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   );
 
-  const gaussian_scaling = 1; // can be parameterized later
-  const sh_deg = 3; // hardcoded for now, can be parameterized later
-  const render_settings_data = new Uint32Array([gaussian_scaling, sh_deg]);
+  const gaussian_scaling = 1000;
+  const sh_deg = pc.sh_deg; 
+  let render_settings_data = new Uint32Array([gaussian_scaling, sh_deg]);
   device.queue.writeBuffer(render_settings_buffer, 0, render_settings_data);
 
   // ===============================================
@@ -439,5 +440,7 @@ export default function get_renderer(
       render(encoder, texture_view);
     },
     camera_buffer,
+    dataBuffer: render_settings_data,
+    buffer: render_settings_buffer
   };
 }

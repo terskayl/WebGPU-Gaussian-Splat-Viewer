@@ -122,6 +122,11 @@ export default async function init(
       {min: 0, max: 1.5}
     ).on('change', (e) => {
       //TODO: Bind constants to the gaussian renderer.
+      if (gaussian_renderer) {
+        let render_settings_data = new Uint32Array([params.gaussian_multiplier * 1000, gaussian_renderer.dataBuffer[1]]);
+        device.queue.writeBuffer(gaussian_renderer.buffer, 0, render_settings_data);
+        
+      }      
     });
   }
 

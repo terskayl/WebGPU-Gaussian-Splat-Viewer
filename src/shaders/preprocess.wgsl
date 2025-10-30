@@ -166,7 +166,7 @@ fn preprocess(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgr
     var clip_pos = camera.proj * vec4<f32>(view_pos, 1.0);
     clip_pos /= clip_pos.w;
 
-    let sh_deg = 3u; // TODO u32(render_settings.sh_deg);
+    let sh_deg = u32(render_settings.sh_deg);
     let eye = camera.view_inv[3].xyz;
     let color = computeColorFromSH(normalize(eye - world_pos), idx, sh_deg);
 
@@ -176,11 +176,11 @@ fn preprocess(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgr
                              0.0, 1.0, 0.0,
                              0.0, 0.0, 1.0);
 
-    // TODO idk while render_settings isn't working.
-                             // exp as stored in log space
-    scale[0][0] = 1.0 * exp(unpack2x16float(gaussian.scale[0]).x);
-    scale[1][1] = 1.0 * exp(unpack2x16float(gaussian.scale[0]).y);
-    scale[2][2] = 1.0 * exp(unpack2x16float(gaussian.scale[1]).x);
+    // Gaussian Scaling is just a unsigned representing a float up to 3 decimal places.
+                                                    // exp as stored in log space
+    scale[0][0] = f32(render_settings.gaussian_scaling) / 1000.0 * exp(unpack2x16float(gaussian.scale[0]).x);
+    scale[1][1] = f32(render_settings.gaussian_scaling) / 1000.0 * exp(unpack2x16float(gaussian.scale[0]).y);
+    scale[2][2] = f32(render_settings.gaussian_scaling) / 1000.0 * exp(unpack2x16float(gaussian.scale[1]).x);
 
     var quat = gaussian.rot;
     let qw = unpack2x16float(quat[0]).x;
