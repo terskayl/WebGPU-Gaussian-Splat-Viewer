@@ -7,8 +7,8 @@
 * Tested on: Windows 11, i5-13420H @ 1.99GHz 16GB, GTX 4050 16MB (Personal Computer)
 
 ### Live Demo
-
-[![](images/demo.png)](http://TODO.github.io/Project4-WebGPU-Forward-Plus-and-Clustered-Deferred)
+Click below to launch the demo in a new webpage. You will need a `.ply` to be able to load it. You may download the samples used in the examples below in this [Google Drive](https://drive.google.com/drive/folders/1Fz0QhyDU12JTsl2e7umGi5iy_V9drrIW?usp=sharing) 
+[![](images/demo.png)](http://terskayl.github.io//WebGPU-Gaussian-Splat-Viewer)
 
 ### Demo Video/GIF
 
